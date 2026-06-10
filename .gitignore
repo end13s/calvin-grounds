@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+app/node_modules/
+
+# Build output
+app/dist/
+
+# Environment variables — never commit these
+.env
+.env.local
+.env.*.local
+app/.env
+app/.env.local
+app/.env.*.local
+
+# Editor / OS
+.DS_Store
+.vscode/
+*.log
