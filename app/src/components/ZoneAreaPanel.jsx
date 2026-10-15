@@ -20,9 +20,9 @@ const CATEGORY_LABELS = {
 
 const TODAY = () => new Date().toISOString().split('T')[0]
 
-function daysAgo(isoStr) {
+function daysAgo(isoStr, now) {
   if (!isoStr) return ''
-  const ms = Date.now() - new Date(isoStr)
+  const ms = now - new Date(isoStr)
   const days = Math.floor(ms / (1000 * 60 * 60 * 24))
   if (days === 0) return 'today'
   if (days === 1) return '1 day ago'
@@ -54,6 +54,8 @@ export function ZoneAreaPanel({ zone, tasks, onClose, onTasksChange, onAddPatch,
   const [showAddTask, setShowAddTask] = useState(false)
   const [markingDone, setMarkingDone] = useState(null)
   const [deletingPatchId, setDeletingPatchId] = useState(null)
+  // Reference time for "days ago" labels, fixed when the panel opens
+  const [now] = useState(() => Date.now())
 
   async function deletePatch(patchId) {
     if (!window.confirm('Remove this patch from the zone?')) return
@@ -198,13 +200,13 @@ export function ZoneAreaPanel({ zone, tasks, onClose, onTasksChange, onAddPatch,
             <h3>Last activity</h3>
             {activityItems.map(([cat, task]) => {
               const daysAgoVal = task.completed_at
-                ? Math.floor((Date.now() - new Date(task.completed_at)) / (1000 * 60 * 60 * 24))
+                ? Math.floor((now - new Date(task.completed_at)) / (1000 * 60 * 60 * 24))
                 : null
               const stale = task.interval_days && daysAgoVal !== null && daysAgoVal > task.interval_days
               return (
                 <div key={cat} className={`activity-row${stale ? ' activity-row--stale' : ''}`}>
                   <span className="activity-cat">{CATEGORY_LABELS[cat] ?? cat}</span>
-                  <span className="activity-age">{daysAgo(task.completed_at)}</span>
+                  <span className="activity-age">{daysAgo(task.completed_at, now)}</span>
                   {task.interval_days && stale && (
                     <span className="activity-overdue-hint">overdue by {daysAgoVal - task.interval_days}d</span>
                   )}
@@ -224,7 +226,7 @@ export function ZoneAreaPanel({ zone, tasks, onClose, onTasksChange, onAddPatch,
                     <span className="task-title">{task.title}</span>
                     <span className="task-meta">
                       {CATEGORY_LABELS[task.category] ?? task.category}
-                      {task.completed_at && ` · ${daysAgo(task.completed_at)}`}
+                      {task.completed_at && ` · ${daysAgo(task.completed_at, now)}`}
                     </span>
                   </div>
                 </li>

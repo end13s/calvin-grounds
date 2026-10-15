@@ -8,10 +8,47 @@ import { ZoneDirectory } from './components/ZoneDirectory'
 import { MapOverlay } from './components/MapOverlay'
 import './App.css'
 
+async function fetchZones() {
+  const { data, error } = await supabase.rpc('get_zone_areas')
+  return !error && data ? data : null
+}
+
+async function fetchZoneTasks(zoneId) {
+  const { data } = await supabase
+    .from('tasks')
+    .select('*')
+    .eq('entity_type', 'zone_area')
+    .eq('entity_id', zoneId)
+    .order('priority', { ascending: true })
+  return data ?? []
+}
+
+async function fetchOpenTasks() {
+  const { data } = await supabase
+    .from('tasks')
+    .select('*')
+    .eq('entity_type', 'zone_area')
+    .eq('status', 'open')
+    .order('priority', { ascending: true })
+  return data ?? []
+}
+
+async function fetchCompletedTasks() {
+  const { data } = await supabase
+    .from('tasks')
+    .select('*')
+    .eq('entity_type', 'zone_area')
+    .eq('status', 'done')
+    .order('completed_at', { ascending: false })
+    .limit(300)
+  return data ?? []
+}
+
 export default function App() {
   const [zones, setZones] = useState([])
   const [selectedZoneId, setSelectedZoneId] = useState(null)
-  const [zoneTasks, setZoneTasks] = useState([])
+  // Tagged with the zone they belong to, so a slow response never shows under another zone
+  const [zoneTasks, setZoneTasks] = useState({ zoneId: null, tasks: [] })
   const [allOpenTasks, setAllOpenTasks] = useState([])
   const [completedTasks, setCompletedTasks] = useState([])
   const [view, setView] = useState('map') // 'map' | 'todo'
@@ -26,54 +63,43 @@ export default function App() {
 
   const selectedZone = zones.find(z => z.id === selectedZoneId) ?? null
 
+  const selectedZoneTasks = zoneTasks.zoneId === selectedZoneId ? zoneTasks.tasks : []
+
   async function loadZones() {
-    const { data, error } = await supabase.rpc('get_zone_areas')
-    if (!error && data) setZones(data)
+    const data = await fetchZones()
+    if (data) setZones(data)
   }
 
   async function loadZoneTasks(zoneId) {
-    const { data } = await supabase
-      .from('tasks')
-      .select('*')
-      .eq('entity_type', 'zone_area')
-      .eq('entity_id', zoneId)
-      .order('priority', { ascending: true })
-    setZoneTasks(data ?? [])
+    setZoneTasks({ zoneId, tasks: await fetchZoneTasks(zoneId) })
   }
 
   async function loadAllOpenTasks() {
-    const { data } = await supabase
-      .from('tasks')
-      .select('*')
-      .eq('entity_type', 'zone_area')
-      .eq('status', 'open')
-      .order('priority', { ascending: true })
-    setAllOpenTasks(data ?? [])
+    setAllOpenTasks(await fetchOpenTasks())
   }
 
   async function loadCompletedTasks() {
-    const { data } = await supabase
-      .from('tasks')
-      .select('*')
-      .eq('entity_type', 'zone_area')
-      .eq('status', 'done')
-      .order('completed_at', { ascending: false })
-      .limit(300)
-    setCompletedTasks(data ?? [])
+    setCompletedTasks(await fetchCompletedTasks())
   }
 
   useEffect(() => {
-    loadZones()
-    loadAllOpenTasks()
-    loadCompletedTasks()
+    let cancelled = false
+    Promise.all([fetchZones(), fetchOpenTasks(), fetchCompletedTasks()]).then(([zonesData, open, done]) => {
+      if (cancelled) return
+      if (zonesData) setZones(zonesData)
+      setAllOpenTasks(open)
+      setCompletedTasks(done)
+    })
+    return () => { cancelled = true }
   }, [])
 
   useEffect(() => {
-    if (selectedZoneId) {
-      loadZoneTasks(selectedZoneId)
-    } else {
-      setZoneTasks([])
-    }
+    if (!selectedZoneId) return
+    let cancelled = false
+    fetchZoneTasks(selectedZoneId).then(tasks => {
+      if (!cancelled) setZoneTasks({ zoneId: selectedZoneId, tasks })
+    })
+    return () => { cancelled = true }
   }, [selectedZoneId])
 
   function handleZoneSelect(id) {
@@ -235,7 +261,7 @@ export default function App() {
             {selectedZone && (
               <ZoneAreaPanel
                 zone={selectedZone}
-                tasks={zoneTasks}
+                tasks={selectedZoneTasks}
                 onClose={() => setSelectedZoneId(null)}
                 onTasksChange={handleTasksChange}
                 onAddPatch={() => handleAddPatch(selectedZoneId)}
