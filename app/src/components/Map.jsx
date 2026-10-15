@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import maplibregl from 'maplibre-gl'
+import * as maplibregl from 'maplibre-gl'
+import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { TerraDraw, TerraDrawPolygonMode, TerraDrawRenderMode } from 'terra-draw'
 import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter'
+
+// MapLibre 6 looks for its web worker next to its own module file, which the build does not
+// emit; hand it the worker bundled by Vite so zone polygons render in dev and production.
+maplibregl.setWorkerUrl(maplibreWorkerUrl)
 
 const AREA_TYPE_COLORS = {
   lawn: '#22c55e',
@@ -144,8 +149,9 @@ export function Map({ zones, selectedZoneId, onZoneSelect, onDrawComplete, isDra
           onDrawCompleteRef.current(feat.geometry)
         }
         map.doubleClickZoom.enable()
-        try { draw.setMode('render') } catch {}
-        try { draw.clear() } catch {}
+        // Terra Draw throws if it is already in this mode or already empty; both are fine here.
+        try { draw.setMode('render') } catch { /* already rendering */ }
+        try { draw.clear() } catch { /* nothing to clear */ }
       })
 
       drawRef.current = draw
@@ -157,7 +163,7 @@ export function Map({ zones, selectedZoneId, onZoneSelect, onDrawComplete, isDra
     return () => {
       unmounted = true
       if (drawRef.current) {
-        try { drawRef.current.stop() } catch {}
+        try { drawRef.current.stop() } catch { /* already stopped */ }
         drawRef.current = null
       }
       map.remove()
@@ -188,8 +194,8 @@ export function Map({ zones, selectedZoneId, onZoneSelect, onDrawComplete, isDra
       drawRef.current.setMode('polygon')
     } else {
       map?.doubleClickZoom.enable()
-      try { drawRef.current.setMode('render') } catch {}
-      try { drawRef.current.clear() } catch {}
+      try { drawRef.current.setMode('render') } catch { /* already rendering */ }
+      try { drawRef.current.clear() } catch { /* nothing to clear */ }
     }
   }, [isDrawingActive, mapLoaded])
 
